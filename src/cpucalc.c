@@ -10,32 +10,43 @@ void getSystemStat()
     FILE * fp = fopen( "/proc/stat", "r");
     char buf[_BUFSIZE] = {0,};
 
-    static unsigned long long tcpu_usage, btcpu_usage;
+    static unsigned long long prev_total = 0;
+    static unsigned long long prev_idle = 0;
+
     unsigned long long user = 0, nice = 0, system = 0, idle = 0;
     unsigned long long iowait = 0, irq = 0, softirq = 0, steal = 0, guest = 0, guest_nice = 0;
-    double sum = 0;
 
     if( fp != NULL)
     {
-        fgets(buf, _BUFSIZE, fp);
+        if (fgets(buf, _BUFSIZE, fp))
+        {
+            // CPU의 전체 시간 = 이 모든 필드의 합
+            sscanf(buf, "%*s %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
+                    &user, &nice, &system, &idle,
+                    &iowait, &irq, &softirq, &steal, &guest, &guest_nice);
 
-        sscanf(buf, "%*s %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
-                &user, &nice, &system, &idle,
-                &iowait, &irq, &softirq, &steal, &guest, &guest_nice);
-        tcpu_usage = user + nice + system + idle;
+            // 보통 guest, guest_nice는 제외해도 됨 (가상화 환경이 아니면 0)
+            unsigned long long cur_idle = idle + iowait;
+            unsigned long long cur_total = user + nice + system + idle + iowait + irq + softirq + steal;
 
-        total_cpu_usage = tcpu_usage - btcpu_usage;
-        btcpu_usage = tcpu_usage;
-        
-        sum = tcpu_usage + iowait +irq + softirq + steal + guest + guest_nice;
-        cpu_usage = 100 - ( (idle * 100.0f) / sum ) ;
+            unsigned long long delta_total = cur_total - prev_total;
+            unsigned long long delta_idle = cur_idle - prev_idle;
+
+
+            if (delta_total > 0)
+                cpu_usage = 100.0 * (delta_total - delta_idle) / delta_total;
+
+            total_cpu_usage = delta_total;
+
+            prev_total = cur_total;
+            prev_idle  = cur_idle;
+        }
 
         fclose(fp);
     }
     else
     {
         printf(" '/proc/stat' file open failed. \n");
-        tcpu_usage = 0;
     }
     
     return;
@@ -90,8 +101,13 @@ void getProcinfo(pid_t pid)
 
 bool calCpu()
 {
-    // irix mode
+#if 0
+    // irix mode (단일 코어를 기준 계산)
     pcpu_usage = CPU_EA * total_proc_time * 100 / (float) total_cpu_usage ;
+#else
+    // solaris mode (전체 코어 수를 기준으로 계산)
+    pcpu_usage = total_proc_time * 100 / (float) total_cpu_usage ;
+#endif
 
     if(pcpu_usage < 0)
     {

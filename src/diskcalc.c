@@ -3,6 +3,23 @@
 struct statvfs diskusage;
 Mountinfo *minfo;
 
+void GetDiskUsage_Loop()
+{
+    Mountinfo *minfo_ptr = MountOpen();
+    if (!minfo_ptr)
+    {
+        printf("Failed to open /proc/mounts.\n");
+        return;
+    }
+
+    while (ReadMountInfo(minfo_ptr))
+    {
+        Once_MountInfo(minfo_ptr->mountdir);
+    }
+
+    MountReadClose(minfo_ptr);
+}
+
 Mountinfo *MountOpen()
 {
     Mountinfo *mountinfo = (Mountinfo*)malloc( sizeof(Mountinfo) );
@@ -80,9 +97,23 @@ void Once_MountInfo(char *dir)
         return;
     }
 
-    total = diskusage.f_blocks * diskusage.f_frsize; // 전체 공간
-    used = (diskusage.f_blocks - diskusage.f_bfree) * diskusage.f_frsize; // 사용 중인 공간
-    usage_percentage = ((double)used / total) * 100;
+    // f_blocks : 파일 시스템의 전체 블록 수
+    // f_frsize : 블록 크기
+    total = (unsigned long long)diskusage.f_blocks * diskusage.f_frsize;
 
-    printf("Linux disk usage(%%) - [%s] : %0.2f %% \n", dir, ((double)used / total * 100) );
+    // f_bfree : 슈퍼유저를 포함한 사용 가능한 블록 수
+    // f_bavail : 일반 사용자에게 사용 가능한 블록 수
+    // df와 동일한 결과를 얻으려면 f_blocks - f_bfree 를 사용
+    used = (unsigned long long)(diskusage.f_blocks - diskusage.f_bfree) * diskusage.f_frsize;
+
+    if (total > 0)
+    {
+        usage_percentage = ((double)used / (double)total) * 100.0;
+    }
+    else
+    {
+        usage_percentage = 0.0;
+    }
+
+    printf("Linux disk usage(%%) - [%s] : %0.2f %% \n", dir, usage_percentage);
 }

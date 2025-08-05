@@ -36,6 +36,7 @@ extern Mountinfo *minfo;
 
 
 /*  functions    */
+void GetDiskUsage_Loop();
 void Once_MountInfo(char *dir);
 Mountinfo *MountOpen();
 Mountinfo *ReadMountInfo(Mountinfo *minfo);
